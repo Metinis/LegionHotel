@@ -124,29 +124,98 @@ async function fetchWeather(cityInfo) {
     }
     
     const cur = data.current_condition[0];
-    const weatherDesc = cur.weatherDesc[0]?.value || "";
-    const weatherCode = mapWttrToCode(weatherDesc);
+    
+    // wttr.in weatherCode mapping to Open-Meteo compatible codes
+    const wttrCode = parseInt(cur.weatherCode);
+    let weatherCode = mapWttrCodeToOpenMeteo(wttrCode);
+    
     const weatherInfo = getWeatherDetails(weatherCode);
     
     const weather = {
       temperature: parseFloat(cur.temp_C),
+      feelsLike: parseFloat(cur.FeelsLikeC),
       humidity: parseInt(cur.humidity),
       windSpeed: parseFloat(cur.windspeedKmph) / 3.6, // Convert km/h to m/s
+      windDirection: cur.winddirDegree,
+      pressure: parseInt(cur.pressure),
+      visibility: parseInt(cur.visibility),
+      uvIndex: parseInt(cur.uvIndex),
+      cloudcover: parseInt(cur.cloudcover),
+      precipitation: parseFloat(cur.precipMM),
       weatherCode: weatherCode,
       description: weatherInfo.description,
       icon: weatherInfo.icon,
       unit: "°C",
       source: "wttr.in",
       timestamp: new Date().toISOString(),
+      // Include raw description from wttr.in for reference
+      rawDescription: cur.weatherDesc[0]?.value || "",
     };
     
-    console.log(`✅ Weather for ${cityInfo.name}: ${weather.temperature}°C, ${weather.description}`);
+    console.log(`✅ Weather for ${cityInfo.name}: ${weather.temperature}°C, feels like ${weather.feelsLike}°C, ${weather.description}`);
     cacheSet(key, weather);
     return weather;
   } catch (error) {
     console.error(`❌ wttr.in failed for ${cityInfo.name}:`, error.message);
     return null;
   }
+}
+
+// Map wttr.in weather codes to Open-Meteo compatible codes
+function mapWttrCodeToOpenMeteo(wttrCode) {
+  // wttr.in codes: https://www.worldweatheronline.com/weather-api/api/docs/weather-icons.aspx
+  const codeMap = {
+    113: 0,  // Sunny/Clear
+    116: 2,  // Partly cloudy
+    119: 3,  // Cloudy
+    122: 3,  // Overcast
+    143: 45, // Mist/Fog
+    176: 61, // Patchy rain possible
+    179: 61, // Patchy snow possible
+    182: 61, // Patchy sleet possible
+    185: 61, // Patchy freezing drizzle possible
+    200: 95, // Thundery outbreaks possible
+    227: 71, // Blowing snow
+    230: 71, // Blizzard
+    248: 45, // Fog
+    260: 45, // Freezing fog
+    263: 61, // Patchy light drizzle
+    266: 63, // Light drizzle
+    281: 63, // Freezing drizzle
+    284: 63, // Heavy freezing drizzle
+    293: 61, // Patchy light rain
+    296: 61, // Light rain
+    299: 63, // Moderate rain at times
+    302: 63, // Moderate rain
+    305: 65, // Heavy rain at times
+    308: 65, // Heavy rain
+    311: 61, // Light freezing rain
+    314: 63, // Moderate or heavy freezing rain
+    317: 61, // Light sleet
+    320: 63, // Moderate or heavy sleet
+    323: 71, // Light snow
+    326: 71, // Moderate snow
+    329: 75, // Heavy snow
+    332: 75, // Blizzard
+    335: 75, // Blizzard
+    338: 75, // Heavy snow
+    350: 61, // Ice pellets
+    353: 61, // Light rain shower
+    356: 63, // Moderate or heavy rain shower
+    359: 65, // Torrential rain shower
+    362: 61, // Light sleet showers
+    365: 63, // Moderate or heavy sleet showers
+    368: 71, // Light snow showers
+    371: 75, // Moderate or heavy snow showers
+    374: 61, // Light ice pellets showers
+    377: 63, // Moderate or heavy ice pellets showers
+    386: 95, // Thundery showers with hail
+    389: 95, // Thundery showers with hail
+    392: 95, // Thundery showers with hail
+    395: 95, // Thundery showers with hail
+  };
+  
+  return codeMap[wttrCode] || 1; // Default to mainly clear if unknown
 }
 
 router.get("/search", async (req, res) => {
