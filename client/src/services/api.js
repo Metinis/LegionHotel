@@ -1,7 +1,10 @@
 // Thin wrapper around fetch() for the backend API.
-// In dev the Vite proxy forwards /api -> localhost:5000.
+// In dev: Vite proxies /api -> localhost:5000 (see vite.config.js)
+// In prod: VITE_API_URL points to the deployed backend (set in Render env vars)
 
-const BASE = "/api";
+const BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : "/api";
 
 async function handle(res) {
   if (!res.ok) {
