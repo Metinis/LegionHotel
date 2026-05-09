@@ -73,7 +73,7 @@ function mapWttrToCode(desc) {
   if (d.includes("rain") || d.includes("shower")) return 61;
   if (d.includes("snow")) return 71;
   if (d.includes("thunder")) return 95;
-  return 1; // default to mainly clear
+  return 1;
 }
 
 async function fetchCountryInfo(country) {

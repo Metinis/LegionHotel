@@ -13,20 +13,26 @@ const CITIES = [
   { code: "BER", label: "Berlin" },
 ];
 
-// Open-Meteo weather code -> emoji + description
+// Weather code mapping (matches backend)
 const WEATHER_DESC = {
-  0: { icon: "☀️", text: "Clear" },
-  1: { icon: "🌤️", text: "Mostly clear" },
+  0: { icon: "☀️", text: "Clear sky" },
+  1: { icon: "🌤️", text: "Mainly clear" },
   2: { icon: "⛅", text: "Partly cloudy" },
   3: { icon: "☁️", text: "Overcast" },
   45: { icon: "🌫️", text: "Foggy" },
   48: { icon: "🌫️", text: "Foggy" },
   51: { icon: "🌦️", text: "Light drizzle" },
+  53: { icon: "🌦️", text: "Moderate drizzle" },
+  55: { icon: "🌧️", text: "Dense drizzle" },
   61: { icon: "🌧️", text: "Light rain" },
   63: { icon: "🌧️", text: "Rain" },
   65: { icon: "🌧️", text: "Heavy rain" },
   71: { icon: "🌨️", text: "Snow" },
+  73: { icon: "🌨️", text: "Snow" },
+  75: { icon: "❄️", text: "Heavy snow" },
   80: { icon: "🌦️", text: "Showers" },
+  81: { icon: "🌦️", text: "Showers" },
+  82: { icon: "⛈️", text: "Violent showers" },
   95: { icon: "⛈️", text: "Thunderstorm" },
 };
 
@@ -52,7 +58,7 @@ export default function SearchPage() {
   }
 
   const weatherDesc = result?.weather
-    ? WEATHER_DESC[result.weather.weatherCode] || { icon: "🌡️", text: "" }
+    ? WEATHER_DESC[result.weather.weatherCode] || { icon: "🌡️", text: "Unknown" }
     : null;
 
   return (
@@ -106,6 +112,7 @@ export default function SearchPage() {
                 src={result.countryInfo.flag}
                 alt={result.countryInfo.name}
                 style={{ width: 80, height: 56, objectFit: "cover", borderRadius: 4 }}
+                onError={(e) => e.target.style.display = 'none'}
               />
               <div>
                 <h3 style={{ marginBottom: "0.25rem" }}>{result.city}, {result.countryInfo.name}</h3>
@@ -120,7 +127,7 @@ export default function SearchPage() {
             </div>
           )}
 
-          {result.weather && (
+          {result.weather ? (
             <div
               className="form-card"
               style={{ flex: 1, minWidth: "240px", textAlign: "center" }}
@@ -130,7 +137,23 @@ export default function SearchPage() {
                 {result.weather.temperature}°C
               </h3>
               <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
-                {weatherDesc.text} · Wind {result.weather.windSpeed} km/h
+                {weatherDesc.text}
+                <br />
+                Wind {(result.weather.windSpeed * 3.6).toFixed(1)} km/h
+                {result.weather.humidity && <span> · Humidity {result.weather.humidity}%</span>}
+              </div>
+              <div style={{ fontSize: "0.7rem", marginTop: "0.5rem", color: "var(--color-muted)" }}>
+                Source: {result.weather.source}
+              </div>
+            </div>
+          ) : result && (
+            <div
+              className="form-card"
+              style={{ flex: 1, minWidth: "240px", textAlign: "center" }}
+            >
+              <div style={{ fontSize: "3rem" }}>🌡️</div>
+              <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+                Weather data currently unavailable
               </div>
             </div>
           )}
@@ -145,6 +168,22 @@ export default function SearchPage() {
         <p className="empty">Pick a city and click Search to start.</p>
       )}
 
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="hotel-grid">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="hotel-card" style={{ opacity: 0.6 }}>
+              <div style={{ height: 200, background: "#e0e0e0", borderRadius: "8px 8px 0 0" }}></div>
+              <div className="body">
+                <div style={{ height: 24, background: "#e0e0e0", marginBottom: 8, borderRadius: 4 }}></div>
+                <div style={{ height: 16, background: "#e0e0e0", width: "60%", borderRadius: 4 }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Hotel grid */}
       <div className="hotel-grid">
         {result?.hotels.map((h) => (
           <div className="hotel-card" key={h._id}>
@@ -162,7 +201,7 @@ export default function SearchPage() {
                   navigate(`/book/${h._id}`, { state: { hotel: h } })
                 }
               >
-                Book
+                Book Now
               </button>
             </div>
           </div>
