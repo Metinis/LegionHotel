@@ -17,11 +17,11 @@
 
 **Deployed App Link:** https://legionhotel.onrender.com/
 
-**AI Use:** 1. Claude
+**AI Use:** 1. Claude 2.Deepseek
 
 ---
 
-## Local Development, Deepseek
+## Local Development,
 
 ### Prerequisites
 - Node.js 18+
