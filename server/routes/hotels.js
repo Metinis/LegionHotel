@@ -5,154 +5,68 @@ const Hotel = require("../models/Hotel");
 const router = express.Router();
 
 const CITY_COORDS = {
-  PAR: {
-    name: "Paris",
-    country: "France",
-    lat: 48.8566,
-    lon: 2.3522,
-  },
-  NYC: {
-    name: "New York",
-    country: "United States",
-    lat: 40.7128,
-    lon: -74.006,
-  },
-  LON: {
-    name: "London",
-    country: "United Kingdom",
-    lat: 51.5074,
-    lon: -0.1278,
-  },
-  MAD: {
-    name: "Madrid",
-    country: "Spain",
-    lat: 40.4168,
-    lon: -3.7038,
-  },
-  TYO: {
-    name: "Tokyo",
-    country: "Japan",
-    lat: 35.6762,
-    lon: 139.6503,
-  },
-  ROM: {
-    name: "Rome",
-    country: "Italy",
-    lat: 41.9028,
-    lon: 12.4964,
-  },
-  BCN: {
-    name: "Barcelona",
-    country: "Spain",
-    lat: 41.3851,
-    lon: 2.1734,
-  },
-  BER: {
-    name: "Berlin",
-    country: "Germany",
-    lat: 52.52,
-    lon: 13.405,
-  },
+  PAR: { name: "Paris", country: "France", lat: 48.8566, lon: 2.3522 },
+  NYC: { name: "New York", country: "United States", lat: 40.7128, lon: -74.0060 },
+  LON: { name: "London", country: "United Kingdom", lat: 51.5074, lon: -0.1278 },
+  MAD: { name: "Madrid", country: "Spain", lat: 40.4168, lon: -3.7038 },
+  TYO: { name: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503 },
+  ROM: { name: "Rome", country: "Italy", lat: 41.9028, lon: 12.4964 },
+  BCN: { name: "Barcelona", country: "Spain", lat: 41.3851, lon: 2.1734 },
+  BER: { name: "Berlin", country: "Germany", lat: 52.5200, lon: 13.4050 },
 };
 
-// --------------------
-// SIMPLE MEMORY CACHE
-// --------------------
+// Weather code mapping for better descriptions
+const WEATHER_CODES = {
+  0: { description: "Clear sky", icon: "☀️" },
+  1: { description: "Mainly clear", icon: "🌤️" },
+  2: { description: "Partly cloudy", icon: "⛅" },
+  3: { description: "Overcast", icon: "☁️" },
+  45: { description: "Foggy", icon: "🌫️" },
+  48: { description: "Depositing rime fog", icon: "🌫️" },
+  51: { description: "Light drizzle", icon: "🌦️" },
+  53: { description: "Moderate drizzle", icon: "🌦️" },
+  55: { description: "Dense drizzle", icon: "🌧️" },
+  61: { description: "Slight rain", icon: "🌧️" },
+  63: { description: "Moderate rain", icon: "🌧️" },
+  65: { description: "Heavy rain", icon: "🌧️" },
+  71: { description: "Slight snow fall", icon: "🌨️" },
+  73: { description: "Moderate snow fall", icon: "🌨️" },
+  75: { description: "Heavy snow fall", icon: "❄️" },
+  80: { description: "Slight rain showers", icon: "🌦️" },
+  81: { description: "Moderate rain showers", icon: "🌦️" },
+  82: { description: "Violent rain showers", icon: "⛈️" },
+  95: { description: "Thunderstorm", icon: "⛈️" },
+};
 
+// Caches
 const cache = new Map();
-
-function cacheGet(key, maxAgeMs) {
-  const entry = cache.get(key);
-
-  if (!entry) return null;
-
-  const isExpired = Date.now() - entry.time > maxAgeMs;
-
-  if (isExpired) {
-    cache.delete(key);
-    return null;
-  }
-
-  return entry.data;
-}
-
-function cacheSet(key, data) {
-  if (data != null) {
-    cache.set(key, {
-      time: Date.now(),
-      data,
-    });
-  }
-}
-
-// --------------------
-// AXIOS CLIENT
-// --------------------
+const cacheGet = (key, maxAgeMs) => {
+  const e = cache.get(key);
+  if (e && Date.now() - e.time < maxAgeMs) return e.data;
+  return null;
+};
+const cacheSet = (key, data) => {
+  if (data != null) cache.set(key, { time: Date.now(), data });
+};
 
 const httpClient = axios.create({
-  timeout: 8000,
+  timeout: 10000,
   headers: {
-    "User-Agent":
-      "Mozilla/5.0 (compatible; LegionHotel/1.0; CMSC335 student project)",
+    "User-Agent": "LegionHotel/1.0 (CMSC335 student project)",
     Accept: "application/json",
   },
 });
 
-// --------------------
-// WEATHER DESCRIPTION
-// --------------------
-
-function weatherDescription(code) {
-  const map = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-
-    45: "Fog",
-    48: "Depositing rime fog",
-
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-
-    71: "Slight snow",
-    73: "Moderate snow",
-    75: "Heavy snow",
-
-    80: "Rain showers",
-    81: "Heavy rain showers",
-
-    95: "Thunderstorm",
-  };
-
-  return map[code] || "Unknown";
-}
-
-// --------------------
-// COUNTRY INFO
-// --------------------
-
 async function fetchCountryInfo(country) {
   const key = `country:${country}`;
-
-  const cached = cacheGet(key, 24 * 60 * 60 * 1000);
-
-  if (cached) return cached;
+  const hit = cacheGet(key, 24 * 60 * 60 * 1000);
+  if (hit) return hit;
 
   try {
-    const response = await httpClient.get(
-      `https://restcountries.com/v3.1/name/${encodeURIComponent(
-        country
-      )}?fullText=true&fields=name,flags,currencies,languages,timezones,capital`
+    const r = await httpClient.get(
+      `https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fullText=true&fields=name,flags,currencies,languages,timezones,capital`
     );
-
-    const c = response.data[0];
-
+    const c = r.data[0];
     const result = {
       name: c.name.common,
       flag: c.flags.svg,
@@ -162,98 +76,147 @@ async function fetchCountryInfo(country) {
       timezone: c.timezones?.[0],
       capital: c.capital?.[0],
     };
-
     cacheSet(key, result);
-
     return result;
   } catch (e) {
-    console.error(
-      "REST Countries failed:",
-      e.response?.status || e.code,
-      e.message
-    );
-
+    console.error("REST Countries failed:", e.response?.status || e.code, e.message);
     return null;
   }
 }
 
-// --------------------
-// WEATHER
-// --------------------
+// Helper to get weather description
+function getWeatherDetails(code) {
+  return WEATHER_CODES[code] || { description: "Unknown", icon: "❓" };
+}
 
+// Primary weather source: Open-Meteo (most accurate)
+async function fetchOpenMeteo(cityInfo) {
+  try {
+    console.log(`Fetching weather for ${cityInfo.name} from Open-Meteo...`);
+    const response = await httpClient.get("https://api.open-meteo.com/v1/forecast", {
+      params: {
+        latitude: cityInfo.lat,
+        longitude: cityInfo.lon,
+        current: "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+        temperature_unit: "celsius",
+        wind_speed_unit: "ms",
+        timezone: "auto",
+      },
+    });
+    
+    if (response.data && response.data.current) {
+      const weatherCode = response.data.current.weather_code;
+      const weatherInfo = getWeatherDetails(weatherCode);
+      
+      const result = {
+        temperature: Math.round(response.data.current.temperature_2m * 10) / 10,
+        humidity: response.data.current.relative_humidity_2m,
+        windSpeed: Math.round(response.data.current.wind_speed_10m * 10) / 10,
+        weatherCode: weatherCode,
+        description: weatherInfo.description,
+        icon: weatherInfo.icon,
+        unit: "°C",
+        source: "Open-Meteo (Current)",
+        timestamp: new Date().toISOString(),
+      };
+      
+      console.log(`✅ Open-Meteo success: ${result.temperature}°C, ${result.description}`);
+      return result;
+    }
+    throw new Error("Invalid response from Open-Meteo");
+  } catch (e) {
+    console.error("❌ Open-Meteo failed:", e.message);
+    return null;
+  }
+}
+
+// Backup: wttr.in
+async function fetchWttrIn(cityInfo) {
+  try {
+    console.log(`Trying wttr.in for ${cityInfo.name}...`);
+    const response = await httpClient.get(
+      `https://wttr.in/${cityInfo.lat},${cityInfo.lon}?format=j1`,
+      { timeout: 8000 }
+    );
+    
+    let data = response.data;
+    if (typeof data === "string") {
+      data = JSON.parse(data);
+    }
+    
+    if (data && data.current_condition && data.current_condition[0]) {
+      const cur = data.current_condition[0];
+      const temp = parseFloat(cur.temp_C);
+      const windSpeed = parseFloat(cur.windspeedKmph) / 3.6; // Convert to m/s
+      const desc = (cur.weatherDesc[0]?.value || "").toLowerCase();
+      
+      // Map description to weather code
+      let weatherCode = 1;
+      if (desc.includes("clear") || desc.includes("sunny")) weatherCode = 0;
+      else if (desc.includes("partly cloudy")) weatherCode = 2;
+      else if (desc.includes("cloudy") || desc.includes("overcast")) weatherCode = 3;
+      else if (desc.includes("rain")) weatherCode = 61;
+      else if (desc.includes("snow")) weatherCode = 71;
+      else if (desc.includes("thunder")) weatherCode = 95;
+      
+      const weatherInfo = getWeatherDetails(weatherCode);
+      
+      const result = {
+        temperature: Math.round(temp * 10) / 10,
+        humidity: cur.humidity ? parseInt(cur.humidity) : null,
+        windSpeed: Math.round(windSpeed * 10) / 10,
+        weatherCode: weatherCode,
+        description: weatherInfo.description,
+        icon: weatherInfo.icon,
+        unit: "°C",
+        source: "wttr.in",
+        timestamp: new Date().toISOString(),
+      };
+      
+      console.log(`✅ wttr.in success: ${result.temperature}°C, ${result.description}`);
+      return result;
+    }
+    throw new Error("Invalid response from wttr.in");
+  } catch (e) {
+    console.error("❌ wttr.in failed:", e.message);
+    return null;
+  }
+}
+
+// Main weather function with fallbacks
 async function fetchWeather(cityInfo) {
   const key = `weather:${cityInfo.name}`;
-
-  // 5 minute cache
-  const cached = cacheGet(key, 5 * 60 * 1000);
-
-  if (cached) return cached;
-
-  try {
-    const response = await httpClient.get(
-      "https://api.open-meteo.com/v1/forecast",
-      {
-        params: {
-          latitude: cityInfo.lat,
-          longitude: cityInfo.lon,
-          current: [
-            "temperature_2m",
-            "relative_humidity_2m",
-            "apparent_temperature",
-            "weather_code",
-            "wind_speed_10m",
-          ].join(","),
-          timezone: "auto",
-        },
-      }
-    );
-
-    const current = response.data.current;
-
-    const result = {
-      temperature: current.temperature_2m,
-      feelsLike: current.apparent_temperature,
-      humidity: current.relative_humidity_2m,
-      windSpeed: current.wind_speed_10m,
-
-      weatherCode: current.weather_code,
-      description: weatherDescription(current.weather_code),
-
-      unit: "°C",
-      source: "Open-Meteo",
-
-      timestamp: current.time,
-    };
-
-    cacheSet(key, result);
-
-    return result;
-  } catch (e) {
-    console.error(
-      "Weather fetch failed:",
-      e.response?.status || e.code,
-      e.message
-    );
-
-    return null;
+  const hit = cacheGet(key, 30 * 60 * 1000); // 30 minute cache
+  if (hit) {
+    console.log(`📦 Using cached weather for ${cityInfo.name}`);
+    return hit;
   }
-}
 
-// --------------------
-// ROUTES
-// --------------------
+  // Try Open-Meteo first (most accurate)
+  let weather = await fetchOpenMeteo(cityInfo);
+  
+  // Fallback to wttr.in if Open-Meteo fails
+  if (!weather) {
+    console.log(`⚠️ Open-Meteo failed, falling back to wttr.in for ${cityInfo.name}`);
+    weather = await fetchWttrIn(cityInfo);
+  }
+  
+  // Cache if we got valid data
+  if (weather) {
+    cacheSet(key, weather);
+    console.log(`💾 Cached weather for ${cityInfo.name}`);
+  } else {
+    console.error(`❌ All weather sources failed for ${cityInfo.name}`);
+  }
+  
+  return weather;
+}
 
 router.get("/search", async (req, res) => {
   const { city } = req.query;
-
-  if (!city) {
-    return res.status(400).json({
-      error: "city query param required",
-    });
-  }
+  if (!city) return res.status(400).json({ error: "city query param required" });
 
   const cityCode = city.toUpperCase();
-
   const cityInfo = CITY_COORDS[cityCode];
 
   if (!cityInfo) {
@@ -262,67 +225,45 @@ router.get("/search", async (req, res) => {
     });
   }
 
-  try {
-    const [hotels, countryInfo, weather] = await Promise.all([
-      Hotel.find({ city: cityCode }).lean(),
+  console.log(`🔍 Searching for city: ${cityInfo.name} (${cityCode})`);
 
-      fetchCountryInfo(cityInfo.country),
+  const [hotels, countryInfo, weather] = await Promise.all([
+    Hotel.find({ city: cityCode }).lean().catch((e) => {
+      console.error("Mongo hotels query failed:", e.message);
+      return [];
+    }),
+    fetchCountryInfo(cityInfo.country),
+    fetchWeather(cityInfo),
+  ]);
 
-      fetchWeather(cityInfo),
-    ]);
+  console.log(`✅ Response for ${cityInfo.name}: Weather=${weather ? weather.source : 'None'}, Hotels=${hotels.length}`);
 
-    return res.json({
-      city: cityInfo.name,
-      countryInfo,
-      weather,
-      hotels,
-    });
-  } catch (e) {
-    console.error("Search route failed:", e.message);
-
-    return res.status(500).json({
-      error: "Internal server error",
-    });
-  }
+  res.json({
+    city: cityInfo.name,
+    countryInfo,
+    weather,
+    hotels,
+  });
 });
-
-// GET ALL HOTELS
 
 router.get("/", async (_req, res) => {
   try {
-    const hotels = await Hotel.find()
-      .sort({ createdAt: -1 })
-      .limit(50);
-
-    return res.json(hotels);
-  } catch (e) {
-    console.error("Fetch hotels failed:", e.message);
-
-    return res.status(500).json({
-      error: "Failed to fetch hotels",
-    });
+    const hotels = await Hotel.find().sort({ createdAt: -1 }).limit(50);
+    res.json(hotels);
+  } catch (error) {
+    console.error("Error fetching hotels:", error.message);
+    res.status(500).json({ error: "Failed to fetch hotels" });
   }
 });
-
-// GET HOTEL BY ID
 
 router.get("/:id", async (req, res) => {
   try {
     const hotel = await Hotel.findById(req.params.id);
-
-    if (!hotel) {
-      return res.status(404).json({
-        error: "Hotel not found",
-      });
-    }
-
-    return res.json(hotel);
-  } catch (e) {
-    console.error("Fetch hotel failed:", e.message);
-
-    return res.status(500).json({
-      error: "Failed to fetch hotel",
-    });
+    if (!hotel) return res.status(404).json({ error: "Hotel not found" });
+    res.json(hotel);
+  } catch (error) {
+    console.error("Error fetching hotel:", error.message);
+    res.status(500).json({ error: "Failed to fetch hotel" });
   }
 });
 
