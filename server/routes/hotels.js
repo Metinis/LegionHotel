@@ -38,7 +38,7 @@ const WEATHER_CODES = {
   95: { description: "Thunderstorm", icon: "⛈️" },
 };
 
-// Cache for 30 minutes
+// Cache
 const cache = new Map();
 const cacheGet = (key, maxAgeMs) => {
   const e = cache.get(key);
@@ -49,9 +49,9 @@ const cacheSet = (key, data) => {
   if (data != null) cache.set(key, { time: Date.now(), data });
 };
 
-// HTTP client with longer timeout for Render
+// HTTP client
 const httpClient = axios.create({
-  timeout: 30000, // 30 seconds timeout
+  timeout: 30000,
   headers: {
     "User-Agent": "LegionHotel/1.0 (CMSC335 student project)",
     Accept: "application/json",
@@ -60,6 +60,20 @@ const httpClient = axios.create({
 
 function getWeatherDetails(code) {
   return WEATHER_CODES[code] || { description: "Unknown", icon: "❓" };
+}
+
+// Map wttr.in description to weather code
+function mapWttrToCode(desc) {
+  const d = desc.toLowerCase();
+  if (d.includes("clear") || d.includes("sunny")) return 0;
+  if (d.includes("partly cloudy")) return 2;
+  if (d.includes("cloudy") || d.includes("overcast")) return 3;
+  if (d.includes("fog") || d.includes("mist")) return 45;
+  if (d.includes("drizzle")) return 51;
+  if (d.includes("rain") || d.includes("shower")) return 61;
+  if (d.includes("snow")) return 71;
+  if (d.includes("thunder")) return 95;
+  return 1; // default to mainly clear
 }
 
 async function fetchCountryInfo(country) {
@@ -89,7 +103,6 @@ async function fetchCountryInfo(country) {
   }
 }
 
-// Replace fetchWeather function with:
 async function fetchWeather(cityInfo) {
   const key = `weather:${cityInfo.name}`;
   const hit = cacheGet(key, 30 * 60 * 1000);
@@ -102,39 +115,38 @@ async function fetchWeather(cityInfo) {
     );
     
     let data = response.data;
-    if (typeof data === "string") data = JSON.parse(data);
+    if (typeof data === "string") {
+      data = JSON.parse(data);
+    }
+    
+    if (!data || !data.current_condition || !data.current_condition[0]) {
+      throw new Error("Invalid response from wttr.in");
+    }
     
     const cur = data.current_condition[0];
-    const weatherInfo = getWeatherDetails(mapWttrDescription(cur.weatherDesc[0]?.value || ""));
+    const weatherDesc = cur.weatherDesc[0]?.value || "";
+    const weatherCode = mapWttrToCode(weatherDesc);
+    const weatherInfo = getWeatherDetails(weatherCode);
     
     const weather = {
       temperature: parseFloat(cur.temp_C),
       humidity: parseInt(cur.humidity),
-      windSpeed: parseFloat(cur.windspeedKmph) / 3.6,
-      weatherCode: mapWttrToCode(cur.weatherDesc[0]?.value || ""),
+      windSpeed: parseFloat(cur.windspeedKmph) / 3.6, // Convert km/h to m/s
+      weatherCode: weatherCode,
       description: weatherInfo.description,
       icon: weatherInfo.icon,
       unit: "°C",
       source: "wttr.in",
+      timestamp: new Date().toISOString(),
     };
     
+    console.log(`✅ Weather for ${cityInfo.name}: ${weather.temperature}°C, ${weather.description}`);
     cacheSet(key, weather);
     return weather;
   } catch (error) {
-    console.error("❌ wttr.in failed:", error.message);
+    console.error(`❌ wttr.in failed for ${cityInfo.name}:`, error.message);
     return null;
   }
-}
-
-function mapWttrDescription(desc) {
-  const d = desc.toLowerCase();
-  if (d.includes("clear") || d.includes("sunny")) return { description: "Clear sky", icon: "☀️" };
-  if (d.includes("partly cloudy")) return { description: "Partly cloudy", icon: "⛅" };
-  if (d.includes("cloudy")) return { description: "Overcast", icon: "☁️" };
-  if (d.includes("rain") || d.includes("shower")) return { description: "Rain", icon: "🌧️" };
-  if (d.includes("snow")) return { description: "Snow", icon: "🌨️" };
-  if (d.includes("thunder")) return { description: "Thunderstorm", icon: "⛈️" };
-  return { description: "Unknown", icon: "❓" };
 }
 
 router.get("/search", async (req, res) => {
