@@ -1,0 +1,184 @@
+/* Global stylesheet for Legion Hotel
+ * Uses background-color, color, font-size, and a Google Font
+ * (loaded via <link> in index.html).
+ */
+
+:root {
+  --color-bg: #f7f5f0;
+  --color-surface: #ffffff;
+  --color-primary: #1f4068;
+  --color-accent: #c9a36b;
+  --color-text: #1a1a1a;
+  --color-muted: #6b6b6b;
+  --color-danger: #b54040;
+  --color-border: #e2dfd8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  font-family: "Playfair Display", serif;
+  color: var(--color-primary);
+}
+
+h1 { font-size: 2.5rem; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.25rem; }
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+/* --- Layout --- */
+.navbar {
+  background-color: var(--color-primary);
+  color: var(--color-surface);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.navbar a {
+  color: var(--color-surface);
+  font-size: 1rem;
+  margin-left: 1.25rem;
+}
+.navbar .brand {
+  font-family: "Playfair Display", serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+/* --- Forms --- */
+.form-card {
+  background-color: var(--color-surface);
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.form-field {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+}
+.form-field label {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-bottom: 0.35rem;
+}
+input, select {
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+button {
+  background-color: var(--color-primary);
+  color: var(--color-surface);
+  border: none;
+  padding: 0.7rem 1.4rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+button:hover { background-color: #14304d; }
+button.accent { background-color: var(--color-accent); }
+button.danger { background-color: var(--color-danger); }
+
+/* --- Hotel grid --- */
+.hotel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+.hotel-card {
+  background-color: var(--color-surface);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+.hotel-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+}
+.hotel-card .body { padding: 1rem; flex: 1; }
+.hotel-card h3 { margin-bottom: 0.4rem; }
+.hotel-card .meta {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  margin-bottom: 0.75rem;
+}
+.hotel-card .price {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.hotel-card .footer {
+  padding: 0 1rem 1rem;
+}
+
+/* --- Bookings --- */
+.booking-row {
+  background-color: var(--color-surface);
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.booking-row.cancelled { opacity: 0.55; }
+.status-pill {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background-color: #d8eecb;
+  color: #2c5e1b;
+  text-transform: uppercase;
+}
+.status-pill.cancelled {
+  background-color: #f3d6d6;
+  color: var(--color-danger);
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.95rem;
+  padding: 2rem;
+}
