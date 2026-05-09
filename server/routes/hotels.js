@@ -15,7 +15,7 @@ const CITY_COORDS = {
   BER: { name: "Berlin", country: "Germany", lat: 52.5200, lon: 13.4050 },
 };
 
-// Weather code mapping for better descriptions
+// Weather code mapping
 const WEATHER_CODES = {
   0: { description: "Clear sky", icon: "☀️" },
   1: { description: "Mainly clear", icon: "🌤️" },
@@ -38,7 +38,7 @@ const WEATHER_CODES = {
   95: { description: "Thunderstorm", icon: "⛈️" },
 };
 
-// Caches
+// Cache for 30 minutes
 const cache = new Map();
 const cacheGet = (key, maxAgeMs) => {
   const e = cache.get(key);
@@ -49,13 +49,18 @@ const cacheSet = (key, data) => {
   if (data != null) cache.set(key, { time: Date.now(), data });
 };
 
+// HTTP client with longer timeout for Render
 const httpClient = axios.create({
-  timeout: 10000,
+  timeout: 30000, // 30 seconds timeout
   headers: {
     "User-Agent": "LegionHotel/1.0 (CMSC335 student project)",
     Accept: "application/json",
   },
 });
+
+function getWeatherDetails(code) {
+  return WEATHER_CODES[code] || { description: "Unknown", icon: "❓" };
+}
 
 async function fetchCountryInfo(country) {
   const key = `country:${country}`;
@@ -84,15 +89,17 @@ async function fetchCountryInfo(country) {
   }
 }
 
-// Helper to get weather description
-function getWeatherDetails(code) {
-  return WEATHER_CODES[code] || { description: "Unknown", icon: "❓" };
-}
+async function fetchWeather(cityInfo) {
+  const key = `weather:${cityInfo.name}`;
+  const hit = cacheGet(key, 30 * 60 * 1000);
+  if (hit) {
+    console.log(`📦 Using cached weather for ${cityInfo.name}`);
+    return hit;
+  }
 
-// Primary weather source: Open-Meteo (most accurate)
-async function fetchOpenMeteo(cityInfo) {
   try {
-    console.log(`Fetching weather for ${cityInfo.name} from Open-Meteo...`);
+    console.log(`🌤️ Fetching weather for ${cityInfo.name} from Open-Meteo...`);
+    
     const response = await httpClient.get("https://api.open-meteo.com/v1/forecast", {
       params: {
         latitude: cityInfo.lat,
@@ -108,7 +115,7 @@ async function fetchOpenMeteo(cityInfo) {
       const weatherCode = response.data.current.weather_code;
       const weatherInfo = getWeatherDetails(weatherCode);
       
-      const result = {
+      const weather = {
         temperature: Math.round(response.data.current.temperature_2m * 10) / 10,
         humidity: response.data.current.relative_humidity_2m,
         windSpeed: Math.round(response.data.current.wind_speed_10m * 10) / 10,
@@ -116,105 +123,32 @@ async function fetchOpenMeteo(cityInfo) {
         description: weatherInfo.description,
         icon: weatherInfo.icon,
         unit: "°C",
-        source: "Open-Meteo (Current)",
+        source: "Open-Meteo",
         timestamp: new Date().toISOString(),
       };
       
-      console.log(`✅ Open-Meteo success: ${result.temperature}°C, ${result.description}`);
-      return result;
+      console.log(`✅ Weather for ${cityInfo.name}: ${weather.temperature}°C, ${weather.description}, Wind: ${weather.windSpeed} m/s`);
+      
+      cacheSet(key, weather);
+      return weather;
     }
+    
     throw new Error("Invalid response from Open-Meteo");
-  } catch (e) {
-    console.error("❌ Open-Meteo failed:", e.message);
+  } catch (error) {
+    console.error(`❌ Open-Meteo failed for ${cityInfo.name}:`, error.message);
+    if (error.response) {
+      console.error("Response status:", error.response.status);
+      console.error("Response data:", error.response.data);
+    }
     return null;
   }
-}
-
-// Backup: wttr.in
-async function fetchWttrIn(cityInfo) {
-  try {
-    console.log(`Trying wttr.in for ${cityInfo.name}...`);
-    const response = await httpClient.get(
-      `https://wttr.in/${cityInfo.lat},${cityInfo.lon}?format=j1`,
-      { timeout: 8000 }
-    );
-    
-    let data = response.data;
-    if (typeof data === "string") {
-      data = JSON.parse(data);
-    }
-    
-    if (data && data.current_condition && data.current_condition[0]) {
-      const cur = data.current_condition[0];
-      const temp = parseFloat(cur.temp_C);
-      const windSpeed = parseFloat(cur.windspeedKmph) / 3.6; // Convert to m/s
-      const desc = (cur.weatherDesc[0]?.value || "").toLowerCase();
-      
-      // Map description to weather code
-      let weatherCode = 1;
-      if (desc.includes("clear") || desc.includes("sunny")) weatherCode = 0;
-      else if (desc.includes("partly cloudy")) weatherCode = 2;
-      else if (desc.includes("cloudy") || desc.includes("overcast")) weatherCode = 3;
-      else if (desc.includes("rain")) weatherCode = 61;
-      else if (desc.includes("snow")) weatherCode = 71;
-      else if (desc.includes("thunder")) weatherCode = 95;
-      
-      const weatherInfo = getWeatherDetails(weatherCode);
-      
-      const result = {
-        temperature: Math.round(temp * 10) / 10,
-        humidity: cur.humidity ? parseInt(cur.humidity) : null,
-        windSpeed: Math.round(windSpeed * 10) / 10,
-        weatherCode: weatherCode,
-        description: weatherInfo.description,
-        icon: weatherInfo.icon,
-        unit: "°C",
-        source: "wttr.in",
-        timestamp: new Date().toISOString(),
-      };
-      
-      console.log(`✅ wttr.in success: ${result.temperature}°C, ${result.description}`);
-      return result;
-    }
-    throw new Error("Invalid response from wttr.in");
-  } catch (e) {
-    console.error("❌ wttr.in failed:", e.message);
-    return null;
-  }
-}
-
-// Main weather function with fallbacks
-async function fetchWeather(cityInfo) {
-  const key = `weather:${cityInfo.name}`;
-  const hit = cacheGet(key, 30 * 60 * 1000); // 30 minute cache
-  if (hit) {
-    console.log(`📦 Using cached weather for ${cityInfo.name}`);
-    return hit;
-  }
-
-  // Try Open-Meteo first (most accurate)
-  let weather = await fetchOpenMeteo(cityInfo);
-  
-  // Fallback to wttr.in if Open-Meteo fails
-  if (!weather) {
-    console.log(`⚠️ Open-Meteo failed, falling back to wttr.in for ${cityInfo.name}`);
-    weather = await fetchWttrIn(cityInfo);
-  }
-  
-  // Cache if we got valid data
-  if (weather) {
-    cacheSet(key, weather);
-    console.log(`💾 Cached weather for ${cityInfo.name}`);
-  } else {
-    console.error(`❌ All weather sources failed for ${cityInfo.name}`);
-  }
-  
-  return weather;
 }
 
 router.get("/search", async (req, res) => {
   const { city } = req.query;
-  if (!city) return res.status(400).json({ error: "city query param required" });
+  if (!city) {
+    return res.status(400).json({ error: "city query param required" });
+  }
 
   const cityCode = city.toUpperCase();
   const cityInfo = CITY_COORDS[cityCode];
@@ -236,7 +170,7 @@ router.get("/search", async (req, res) => {
     fetchWeather(cityInfo),
   ]);
 
-  console.log(`✅ Response for ${cityInfo.name}: Weather=${weather ? weather.source : 'None'}, Hotels=${hotels.length}`);
+  console.log(`✅ Response for ${cityInfo.name}: Weather=${weather ? `${weather.temperature}°C ${weather.description}` : 'None'}, Hotels=${hotels.length}`);
 
   res.json({
     city: cityInfo.name,
@@ -259,7 +193,9 @@ router.get("/", async (_req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const hotel = await Hotel.findById(req.params.id);
-    if (!hotel) return res.status(404).json({ error: "Hotel not found" });
+    if (!hotel) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
     res.json(hotel);
   } catch (error) {
     console.error("Error fetching hotel:", error.message);
