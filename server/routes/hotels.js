@@ -89,59 +89,52 @@ async function fetchCountryInfo(country) {
   }
 }
 
+// Replace fetchWeather function with:
 async function fetchWeather(cityInfo) {
   const key = `weather:${cityInfo.name}`;
   const hit = cacheGet(key, 30 * 60 * 1000);
-  if (hit) {
-    console.log(`📦 Using cached weather for ${cityInfo.name}`);
-    return hit;
-  }
+  if (hit) return hit;
 
   try {
-    console.log(`🌤️ Fetching weather for ${cityInfo.name} from Open-Meteo...`);
+    console.log(`🌤️ Fetching weather for ${cityInfo.name} from wttr.in...`);
+    const response = await httpClient.get(
+      `https://wttr.in/${cityInfo.lat},${cityInfo.lon}?format=j1`
+    );
     
-    const response = await httpClient.get("https://api.open-meteo.com/v1/forecast", {
-      params: {
-        latitude: cityInfo.lat,
-        longitude: cityInfo.lon,
-        current: "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
-        temperature_unit: "celsius",
-        wind_speed_unit: "ms",
-        timezone: "auto",
-      },
-    });
+    let data = response.data;
+    if (typeof data === "string") data = JSON.parse(data);
     
-    if (response.data && response.data.current) {
-      const weatherCode = response.data.current.weather_code;
-      const weatherInfo = getWeatherDetails(weatherCode);
-      
-      const weather = {
-        temperature: Math.round(response.data.current.temperature_2m * 10) / 10,
-        humidity: response.data.current.relative_humidity_2m,
-        windSpeed: Math.round(response.data.current.wind_speed_10m * 10) / 10,
-        weatherCode: weatherCode,
-        description: weatherInfo.description,
-        icon: weatherInfo.icon,
-        unit: "°C",
-        source: "Open-Meteo",
-        timestamp: new Date().toISOString(),
-      };
-      
-      console.log(`✅ Weather for ${cityInfo.name}: ${weather.temperature}°C, ${weather.description}, Wind: ${weather.windSpeed} m/s`);
-      
-      cacheSet(key, weather);
-      return weather;
-    }
+    const cur = data.current_condition[0];
+    const weatherInfo = getWeatherDetails(mapWttrDescription(cur.weatherDesc[0]?.value || ""));
     
-    throw new Error("Invalid response from Open-Meteo");
+    const weather = {
+      temperature: parseFloat(cur.temp_C),
+      humidity: parseInt(cur.humidity),
+      windSpeed: parseFloat(cur.windspeedKmph) / 3.6,
+      weatherCode: mapWttrToCode(cur.weatherDesc[0]?.value || ""),
+      description: weatherInfo.description,
+      icon: weatherInfo.icon,
+      unit: "°C",
+      source: "wttr.in",
+    };
+    
+    cacheSet(key, weather);
+    return weather;
   } catch (error) {
-    console.error(`❌ Open-Meteo failed for ${cityInfo.name}:`, error.message);
-    if (error.response) {
-      console.error("Response status:", error.response.status);
-      console.error("Response data:", error.response.data);
-    }
+    console.error("❌ wttr.in failed:", error.message);
     return null;
   }
+}
+
+function mapWttrDescription(desc) {
+  const d = desc.toLowerCase();
+  if (d.includes("clear") || d.includes("sunny")) return { description: "Clear sky", icon: "☀️" };
+  if (d.includes("partly cloudy")) return { description: "Partly cloudy", icon: "⛅" };
+  if (d.includes("cloudy")) return { description: "Overcast", icon: "☁️" };
+  if (d.includes("rain") || d.includes("shower")) return { description: "Rain", icon: "🌧️" };
+  if (d.includes("snow")) return { description: "Snow", icon: "🌨️" };
+  if (d.includes("thunder")) return { description: "Thunderstorm", icon: "⛈️" };
+  return { description: "Unknown", icon: "❓" };
 }
 
 router.get("/search", async (req, res) => {
